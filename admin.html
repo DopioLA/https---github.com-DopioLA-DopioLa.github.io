@@ -3,30 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Панель администратора</title>
+    <title>Панель администратора - Izvini</title>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="firebase-config.js"></script>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header { background: #2c3e50; color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
         .back-link { color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 15px; border-radius: 20px; }
-        .filters { background: #34495e; padding: 20px; display: flex; gap: 15px; align-items: center; }
-        .filters select, .filters button { padding: 10px; border: none; border-radius: 5px; }
-        .apologies-list { padding: 20px; min-height: 400px; }
-        .apology-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 15px; }
+        .filters { background: #34495e; padding: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .filters select, .filters button { padding: 10px; border: none; border-radius: 5px; font-size: 14px; }
+        .filters button { background: #e74c3c; color: white; cursor: pointer; }
+        .filters button:hover { background: #c0392b; }
+        .stats { color: white; font-weight: bold; margin-left: auto; }
+        .apologies-list { padding: 20px; }
+        .apology-card { 
+            background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; 
+            padding: 20px; margin-bottom: 15px; transition: all 0.3s;
+        }
+        .apology-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .apology-card.new { border-left: 4px solid #3498db; background: #ebf5fb; }
         .apology-card.approved { border-left: 4px solid #27ae60; background: #eafaf1; }
         .apology-card.rejected { border-left: 4px solid #e74c3c; background: #fdedec; }
-        .apology-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .apology-actions { display: flex; gap: 10px; margin-top: 15px; }
-        .btn { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; }
+        .apology-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+        .apology-meta { color: #666; font-size: 0.9em; margin-bottom: 10px; }
+        .apology-actions { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+        .btn { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
         .btn-approve { background: #27ae60; color: white; }
         .btn-reject { background: #e74c3c; color: white; }
+        .btn-delete { background: #95a5a6; color: white; }
         .status-badge { padding: 4px 10px; border-radius: 15px; font-size: 0.8em; font-weight: bold; }
         .status-new { background: #3498db; color: white; }
         .status-approved { background: #27ae60; color: white; }
         .status-rejected { background: #e74c3c; color: white; }
-        .stats { margin-left: auto; color: white; font-weight: bold; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+        @media (max-width: 768px) {
+            .filters { flex-direction: column; align-items: stretch; }
+            .stats { margin-left: 0; margin-top: 10px; }
+            .apology-header { flex-direction: column; align-items: flex-start; }
+            .apology-actions { justify-content: center; }
+        }
     </style>
 </head>
 <body>
@@ -34,7 +55,7 @@
         <div class="header">
             <a href="index.html" class="back-link">← На главную</a>
             <h1>🔧 Панель администратора</h1>
-            <p>Управление извинениями</p>
+            <p>Проект "Izvini" - Управление извинениями</p>
         </div>
 
         <div class="filters">
@@ -44,21 +65,21 @@
                 <option value="approved">Одобренные</option>
                 <option value="rejected">Отклоненные</option>
             </select>
-            <button onclick="loadApologies()">Обновить</button>
-            <button onclick="exportData()">📥 Экспорт данных</button>
+            <button onclick="loadApologies()">🔄 Обновить</button>
+            <button onclick="exportData()">📥 Экспорт JSON</button>
             <button onclick="clearAll()">🗑️ Очистить все</button>
-            <div class="stats" id="stats">Всего: 0</div>
+            <div class="stats" id="stats">Загрузка...</div>
         </div>
 
         <div class="apologies-list" id="apologiesList">
-            <p>Загрузка извинений...</p>
+            <div class="loading">⏳ Загрузка извинений...</div>
         </div>
     </div>
 
     <script>
         const ADMIN_PASSWORD = 'admin123';
 
-        // Проверка пароля при загрузке
+        // Проверка пароля
         if (!localStorage.getItem('adminAuthenticated')) {
             const password = prompt('Введите пароль администратора:');
             if (password !== ADMIN_PASSWORD) {
@@ -69,80 +90,94 @@
             }
         }
 
-        function loadApologies() {
-            const statusFilter = document.getElementById('statusFilter').value;
-            const apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
-            displayApologies(apologies, statusFilter);
-            updateStats(apologies);
+        // Загрузка извинений из Firebase
+        async function loadApologies() {
+            try {
+                const snapshot = await db.collection("apologies").orderBy("timestamp", "desc").get();
+                const apologies = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                displayApologies(apologies);
+                updateStats(apologies);
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                document.getElementById('apologiesList').innerHTML = 
+                    '<div class="loading">❌ Ошибка загрузки данных. Проверьте подключение.</div>';
+            }
         }
 
-        function displayApologies(apologies, statusFilter) {
+        // Обновление статуса
+        async function updateStatus(apologyId, newStatus) {
+            try {
+                await db.collection("apologies").doc(apologyId).update({
+                    status: newStatus,
+                    moderatedAt: new Date().toISOString()
+                });
+                loadApologies();
+            } catch (error) {
+                console.error('Ошибка обновления:', error);
+                alert('Ошибка обновления статуса');
+            }
+        }
+
+        // Удаление извинения
+        async function deleteApology(apologyId) {
+            if (confirm('Удалить это извинение?')) {
+                try {
+                    await db.collection("apologies").doc(apologyId).delete();
+                    loadApologies();
+                } catch (error) {
+                    console.error('Ошибка удаления:', error);
+                    alert('Ошибка удаления');
+                }
+            }
+        }
+
+        // Отображение извинений
+        function displayApologies(apologies) {
             const container = document.getElementById('apologiesList');
+            const statusFilter = document.getElementById('statusFilter').value;
             
             if (apologies.length === 0) {
-                container.innerHTML = '<p>Нет извинений для отображения</p>';
+                container.innerHTML = '<div class="loading">📭 Нет извинений для отображения</div>';
                 return;
             }
 
-            let filteredApologies = statusFilter === 'all' ? apologies : apologies.filter(a => a.status === statusFilter);
-            filteredApologies.sort((a, b) => b.id - a.id);
+            let filteredApologies = statusFilter === 'all' ? apologies : 
+                                  apologies.filter(a => a.status === statusFilter);
 
             container.innerHTML = filteredApologies.map(apology => `
                 <div class="apology-card ${apology.status}">
                     <div class="apology-header">
-                        <h3>От: ${apology.name} → Для: ${apology.toName}</h3>
+                        <h3>👤 От: ${apology.name} → Для: ${apology.toName}</h3>
                         <span class="status-badge status-${apology.status}">
-                            ${apology.status === 'new' ? 'Новое' : apology.status === 'approved' ? 'Одобрено' : 'Отклонено'}
+                            ${getStatusText(apology.status)}
                         </span>
                     </div>
-                    <p><strong>Тип:</strong> ${apology.apologyType === 'personal' ? 'Личные отношения' : 
-                      apology.apologyType === 'friendship' ? 'Дружба' : 
-                      apology.apologyType === 'family' ? 'Семейные отношения' : 'Рабочие отношения'}</p>
-                    <p><strong>Дата:</strong> ${apology.timestamp}</p>
-                    <p><strong>Извинение:</strong> ${apology.message}</p>
+                    <div class="apology-meta">
+                        📝 Тип: ${getTypeText(apology.apologyType)} | 
+                        📅 Дата: ${new Date(apology.timestamp).toLocaleString()} |
+                        🌐 IP: ${apology.ip || 'неизвестен'}
+                    </div>
+                    <p><strong>💬 Извинение:</strong> ${apology.message}</p>
                     
                     <div class="apology-actions">
                         ${apology.status === 'new' ? `
-                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">✅ Одобрить</button>
-                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">❌ Отклонить</button>
+                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">
+                                ✅ Одобрить
+                            </button>
+                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">
+                                ❌ Отклонить
+                            </button>
                         ` : ''}
-                        <button class="btn" onclick="deleteApology('${apology.id}')" style="background: #95a5a6; color: white;">🗑️ Удалить</button>
+                        <button class="btn btn-delete" onclick="deleteApology('${apology.id}')">
+                            🗑️ Удалить
+                        </button>
                     </div>
                 </div>
             `).join('');
-        }
-
-        function updateStatus(apologyId, newStatus) {
-            let apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
-            apologies = apologies.map(apology => apology.id === apologyId ? { ...apology, status: newStatus } : apology);
-            localStorage.setItem('apologies', JSON.stringify(apologies));
-            loadApologies();
-        }
-
-        function deleteApology(apologyId) {
-            if (confirm('Удалить это извинение?')) {
-                let apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
-                apologies = apologies.filter(apology => apology.id !== apologyId);
-                localStorage.setItem('apologies', JSON.stringify(apologies));
-                loadApologies();
-            }
-        }
-
-        function exportData() {
-            const apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
-            const dataStr = JSON.stringify(apologies, null, 2);
-            const dataBlob = new Blob([dataStr], {type: 'application/json'});
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(dataBlob);
-            link.download = 'apologies_backup.json';
-            link.click();
-        }
-
-        function clearAll() {
-            if (confirm('Удалить ВСЕ извинения?')) {
-                localStorage.removeItem('apologies');
-                loadApologies();
-            }
         }
 
         function updateStats(apologies) {
@@ -152,11 +187,40 @@
                 approved: apologies.filter(a => a.status === 'approved').length,
                 rejected: apologies.filter(a => a.status === 'rejected').length
             };
-            document.getElementById('stats').innerHTML = `Всего: ${stats.total} | Новые: ${stats.new} | Одобренные: ${stats.approved} | Отклоненные: ${stats.rejected}`;
+            
+            document.getElementById('stats').innerHTML = 
+                `📊 Всего: ${stats.total} | Новые: ${stats.new} | ✅ Одобренные: ${stats.approved} | ❌ Отклоненные: ${stats.rejected}`;
         }
 
-        // Загружаем при открытии
+        function getStatusText(status) {
+            const statuses = { 'new': 'Новое', 'approved': 'Одобрено', 'rejected': 'Отклонено' };
+            return statuses[status] || status;
+        }
+
+        function getTypeText(type) {
+            const types = {
+                'personal': 'Личные отношения',
+                'friendship': 'Дружба', 
+                'family': 'Семейные отношения',
+                'work': 'Рабочие отношения'
+            };
+            return types[type] || type;
+        }
+
+        function exportData() {
+            // Функция экспорта данных
+            alert('Экспорт данных будет реализован');
+        }
+
+        function clearAll() {
+            if (confirm('⚠️ ВНИМАНИЕ! Это удалит ВСЕ извинения. Продолжить?')) {
+                alert('Функция очистки будет реализована');
+            }
+        }
+
+        // Загрузка при открытии и при изменении фильтра
         window.onload = loadApologies;
+        document.getElementById('statusFilter').addEventListener('change', loadApologies);
     </script>
 </body>
 </html>
