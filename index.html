@@ -5,9 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Пространство для извинений</title>
     
-    <!-- Firebase -->
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+    
+    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
     
     <style>
@@ -102,6 +105,7 @@
     </div>
 
     <script>
+        // Firebase уже инициализирован в firebase-config.js
         const form = document.getElementById('apologyForm');
         const loading = document.getElementById('loading');
         const successMessage = document.getElementById('successMessage');
@@ -123,16 +127,19 @@
                 apologyType: document.getElementById('apologyType').value,
                 message: document.getElementById('message').value,
                 timestamp: new Date().toISOString(),
-                status: 'new',
-                ip: await getIP() // Добавляем IP для отслеживания
+                status: 'new'
             };
 
             try {
+                // Сохраняем в Firebase Firestore
                 await db.collection("apologies").add(apology);
+                
+                // Отслеживаем в Analytics
+                analytics.logEvent('apology_submitted');
+                
                 successMessage.style.display = 'block';
                 form.reset();
                 
-                // Автоматически скрываем сообщение через 5 сек
                 setTimeout(() => {
                     successMessage.style.display = 'none';
                 }, 5000);
@@ -145,17 +152,6 @@
                 submitBtn.disabled = false;
             }
         });
-
-        // Функция для получения IP (опционально)
-        async function getIP() {
-            try {
-                const response = await fetch('https://api.ipify.org?format=json');
-                const data = await response.json();
-                return data.ip;
-            } catch {
-                return 'unknown';
-            }
-        }
     </script>
 </body>
 </html>

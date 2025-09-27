@@ -5,9 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель администратора - Izvini</title>
     
-    <!-- Firebase -->
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+    
+    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
     
     <style>
@@ -42,12 +45,6 @@
         .status-approved { background: #27ae60; color: white; }
         .status-rejected { background: #e74c3c; color: white; }
         .loading { text-align: center; padding: 40px; color: #666; }
-        @media (max-width: 768px) {
-            .filters { flex-direction: column; align-items: stretch; }
-            .stats { margin-left: 0; margin-top: 10px; }
-            .apology-header { flex-direction: column; align-items: flex-start; }
-            .apology-actions { justify-content: center; }
-        }
     </style>
 </head>
 <body>
@@ -66,8 +63,6 @@
                 <option value="rejected">Отклоненные</option>
             </select>
             <button onclick="loadApologies()">🔄 Обновить</button>
-            <button onclick="exportData()">📥 Экспорт JSON</button>
-            <button onclick="clearAll()">🗑️ Очистить все</button>
             <div class="stats" id="stats">Загрузка...</div>
         </div>
 
@@ -104,7 +99,7 @@
             } catch (error) {
                 console.error('Ошибка загрузки:', error);
                 document.getElementById('apologiesList').innerHTML = 
-                    '<div class="loading">❌ Ошибка загрузки данных. Проверьте подключение.</div>';
+                    '<div class="loading">❌ Ошибка загрузки данных</div>';
             }
         }
 
@@ -135,13 +130,12 @@
             }
         }
 
-        // Отображение извинений
         function displayApologies(apologies) {
             const container = document.getElementById('apologiesList');
             const statusFilter = document.getElementById('statusFilter').value;
             
             if (apologies.length === 0) {
-                container.innerHTML = '<div class="loading">📭 Нет извинений для отображения</div>';
+                container.innerHTML = '<div class="loading">📭 Нет извинений</div>';
                 return;
             }
 
@@ -153,28 +147,20 @@
                     <div class="apology-header">
                         <h3>👤 От: ${apology.name} → Для: ${apology.toName}</h3>
                         <span class="status-badge status-${apology.status}">
-                            ${getStatusText(apology.status)}
+                            ${apology.status === 'new' ? 'Новое' : apology.status === 'approved' ? 'Одобрено' : 'Отклонено'}
                         </span>
                     </div>
                     <div class="apology-meta">
-                        📝 Тип: ${getTypeText(apology.apologyType)} | 
-                        📅 Дата: ${new Date(apology.timestamp).toLocaleString()} |
-                        🌐 IP: ${apology.ip || 'неизвестен'}
+                        📝 ${apology.apologyType} | 📅 ${new Date(apology.timestamp).toLocaleString()}
                     </div>
                     <p><strong>💬 Извинение:</strong> ${apology.message}</p>
                     
                     <div class="apology-actions">
                         ${apology.status === 'new' ? `
-                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">
-                                ✅ Одобрить
-                            </button>
-                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">
-                                ❌ Отклонить
-                            </button>
+                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">✅ Одобрить</button>
+                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">❌ Отклонить</button>
                         ` : ''}
-                        <button class="btn btn-delete" onclick="deleteApology('${apology.id}')">
-                            🗑️ Удалить
-                        </button>
+                        <button class="btn btn-delete" onclick="deleteApology('${apology.id}')">🗑️ Удалить</button>
                     </div>
                 </div>
             `).join('');
@@ -189,36 +175,10 @@
             };
             
             document.getElementById('stats').innerHTML = 
-                `📊 Всего: ${stats.total} | Новые: ${stats.new} | ✅ Одобренные: ${stats.approved} | ❌ Отклоненные: ${stats.rejected}`;
+                `📊 Всего: ${stats.total} | Новые: ${stats.new} | ✅: ${stats.approved} | ❌: ${stats.rejected}`;
         }
 
-        function getStatusText(status) {
-            const statuses = { 'new': 'Новое', 'approved': 'Одобрено', 'rejected': 'Отклонено' };
-            return statuses[status] || status;
-        }
-
-        function getTypeText(type) {
-            const types = {
-                'personal': 'Личные отношения',
-                'friendship': 'Дружба', 
-                'family': 'Семейные отношения',
-                'work': 'Рабочие отношения'
-            };
-            return types[type] || type;
-        }
-
-        function exportData() {
-            // Функция экспорта данных
-            alert('Экспорт данных будет реализован');
-        }
-
-        function clearAll() {
-            if (confirm('⚠️ ВНИМАНИЕ! Это удалит ВСЕ извинения. Продолжить?')) {
-                alert('Функция очистки будет реализована');
-            }
-        }
-
-        // Загрузка при открытии и при изменении фильтра
+        // Загрузка при открытии
         window.onload = loadApologies;
         document.getElementById('statusFilter').addEventListener('change', loadApologies);
     </script>
