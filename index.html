@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пространство для извинений</title>
+    <style>
+        /* Стили остаются такими же как в предыдущем варианте */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .admin-link {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            text-decoration: none;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="admin.html" class="admin-link">Панель администратора</a>
+            <h1>💐 Пространство для извинений</h1>
+            <p>Иногда самые важные слова бывает сложнее всего произнести</p>
+        </div>
+
+        <div class="content">
+            <div class="success-message" id="successMessage">
+                Ваши извинения были отправлены на модерацию! 🌟
+            </div>
+
+            <form id="apologyForm">
+                <div class="form-group">
+                    <label for="name">Ваше имя:</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="toName">Имя человека, перед которым извиняетесь:</label>
+                    <input type="text" id="toName" name="toName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="apologyType">Тип извинений:</label>
+                    <select id="apologyType" name="apologyType">
+                        <option value="personal">Личные отношения</option>
+                        <option value="friendship">Дружба</option>
+                        <option value="family">Семейные отношения</option>
+                        <option value="work">Рабочие отношения</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="message">Ваши извинения:</label>
+                    <textarea id="message" name="message" required></textarea>
+                </div>
+
+                <button type="submit" class="submit-btn">Отправить извинения</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('apologyForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const apology = {
+                id: Date.now().toString(),
+                name: document.getElementById('name').value,
+                toName: document.getElementById('toName').value,
+                apologyType: document.getElementById('apologyType').value,
+                message: document.getElementById('message').value,
+                timestamp: new Date().toLocaleString(),
+                status: 'new'
+            };
+
+            // Сохраняем в LocalStorage
+            saveApology(apology);
+            
+            document.getElementById('successMessage').style.display = 'block';
+            document.getElementById('apologyForm').reset();
+            
+            setTimeout(() => {
+                document.getElementById('successMessage').style.display = 'none';
+            }, 3000);
+        });
+
+        function saveApology(apology) {
+            let apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
+            apologies.push(apology);
+            localStorage.setItem('apologies', JSON.stringify(apologies));
+        }
+    </script>
+</body>
+</html>

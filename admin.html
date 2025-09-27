@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель администратора</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px 10px 0 0;
+        }
+
+        .back-link {
+            color: white;
+            text-decoration: none;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 15px;
+            border-radius: 20px;
+            position: absolute;
+            left: 30px;
+        }
+
+        .filters {
+            background: #34495e;
+            padding: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .filters select, .filters button {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+        }
+
+        .apologies-list {
+            padding: 20px;
+            min-height: 400px;
+        }
+
+        .apology-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .apology-card.new {
+            border-left: 4px solid #3498db;
+            background: #ebf5fb;
+        }
+
+        .apology-card.approved {
+            border-left: 4px solid #27ae60;
+            background: #eafaf1;
+        }
+
+        .apology-card.rejected {
+            border-left: 4px solid #e74c3c;
+            background: #fdedec;
+        }
+
+        .apology-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .apology-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .btn-approve {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-reject {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-new { background: #3498db; color: white; }
+        .status-approved { background: #27ae60; color: white; }
+        .status-rejected { background: #e74c3c; color: white; }
+
+        .stats {
+            margin-left: auto;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="index.html" class="back-link">← На главную</a>
+            <h1>🔧 Панель администратора</h1>
+            <p>Управление извинениями</p>
+        </div>
+
+        <div class="filters">
+            <select id="statusFilter">
+                <option value="all">Все статусы</option>
+                <option value="new">Новые</option>
+                <option value="approved">Одобренные</option>
+                <option value="rejected">Отклоненные</option>
+            </select>
+            <button onclick="loadApologies()">Обновить</button>
+            <button onclick="exportData()">📥 Экспорт данных</button>
+            <button onclick="clearAll()">🗑️ Очистить все</button>
+            <div class="stats" id="stats">Всего: 0</div>
+        </div>
+
+        <div class="apologies-list" id="apologiesList">
+            <p>Загрузка извинений...</p>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_PASSWORD = 'admin123'; // Пароль для доступа
+
+        // Проверка пароля при загрузке
+        if (!localStorage.getItem('adminAuthenticated')) {
+            const password = prompt('Введите пароль администратора:');
+            if (password !== ADMIN_PASSWORD) {
+                alert('Неверный пароль!');
+                window.location.href = 'index.html';
+            } else {
+                localStorage.setItem('adminAuthenticated', 'true');
+            }
+        }
+
+        function loadApologies() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
+            
+            displayApologies(apologies, statusFilter);
+            updateStats(apologies);
+        }
+
+        function displayApologies(apologies, statusFilter) {
+            const container = document.getElementById('apologiesList');
+            
+            if (apologies.length === 0) {
+                container.innerHTML = '<p>Нет извинений для отображения</p>';
+                return;
+            }
+
+            let filteredApologies = apologies;
+            if (statusFilter !== 'all') {
+                filteredApologies = apologies.filter(a => a.status === statusFilter);
+            }
+
+            // Сортируем по дате (новые сначала)
+            filteredApologies.sort((a, b) => b.id - a.id);
+
+            container.innerHTML = filteredApologies.map(apology => `
+                <div class="apology-card ${apology.status}">
+                    <div class="apology-header">
+                        <h3>От: ${escapeHtml(apology.name)} → Для: ${escapeHtml(apology.toName)}</h3>
+                        <span class="status-badge status-${apology.status}">
+                            ${getStatusText(apology.status)}
+                        </span>
+                    </div>
+                    <p><strong>Тип:</strong> ${getTypeText(apology.apologyType)}</p>
+                    <p><strong>Дата:</strong> ${apology.timestamp}</p>
+                    <p><strong>Извинение:</strong> ${escapeHtml(apology.message)}</p>
+                    
+                    <div class="apology-actions">
+                        ${apology.status === 'new' ? `
+                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">
+                                ✅ Одобрить
+                            </button>
+                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">
+                                ❌ Отклонить
+                            </button>
+                        ` : ''}
+                        <button class="btn" onclick="deleteApology('${apology.id}')" style="background: #95a5a6; color: white;">
+                            🗑️ Удалить
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStatus(apologyId, newStatus) {
+            let apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
+            apologies = apologies.map(apology => {
+                if (apology.id === apologyId) {
+                    return { ...apology, status: newStatus };
+                }
+                return apology;
+            });
+            
+            localStorage.setItem('apologies', JSON.stringify(apologies));
+            loadApologies();
+        }
+
+        function deleteApology(apologyId) {
+            if (confirm('Вы уверены, что хотите удалить это извинение?')) {
+                let apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
+                apologies = apologies.filter(apology => apology.id !== apologyId);
+                localStorage.setItem('apologies', JSON.stringify(apologies));
+                loadApologies();
+            }
+        }
+
+        function exportData() {
+            const apologies = JSON.parse(localStorage.getItem('apologies') || '[]');
+            const dataStr = JSON.stringify(apologies, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = 'apologies_backup.json';
+            link.click();
+        }
+
+        function clearAll() {
+            if (confirm('ВНИМАНИЕ! Это удалит все извинения. Продолжить?')) {
+                localStorage.removeItem('apologies');
+                loadApologies();
+            }
+        }
+
+        function updateStats(apologies) {
+            const stats = {
+                total: apologies.length,
+                new: apologies.filter(a => a.status === 'new').length,
+                approved: apologies.filter(a => a.status === 'approved').length,
+                rejected: apologies.filter(a => a.status === 'rejected').length
+            };
+            
+            document.getElementById('stats').innerHTML = `
+                Всего: ${stats.total} | Новые: ${stats.new} | Одобренные: ${stats.approved} | Отклоненные: ${stats.rejected}
+            `;
+        }
+
+        function getStatusText(status) {
+            const statuses = {
+                'new': 'Новое',
+                'approved': 'Одобрено',
+                'rejected': 'Отклонено'
+            };
+            return statuses[status] || status;
+        }
+
+        function getTypeText(type) {
+            const types = {
+                'personal': 'Личные отношения',
+                'friendship': 'Дружба',
+                'family': 'Семейные отношения',
+                'work': 'Рабочие отношения'
+            };
+            return types[type] || type;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Загружаем извинения при открытии страницы
+        window.onload = loadApologies;
+    </script>
+</body>
+</html>
