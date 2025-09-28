@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Пространство для извинений</title>
-<!-- Firebase SDK -->
+    
+    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
-    
-    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
     
     <style>
@@ -31,6 +29,10 @@
         .admin-link {
             color: white; text-decoration: none; background: rgba(255,255,255,0.2);
             padding: 8px 15px; border-radius: 20px; position: absolute; top: 20px; right: 20px;
+        }
+        .gallery-link {
+            color: white; text-decoration: none; background: rgba(255,255,255,0.2);
+            padding: 8px 15px; border-radius: 20px; position: absolute; top: 20px; right: 180px;
         }
         .content { padding: 40px; }
         .form-group { margin-bottom: 20px; }
@@ -61,14 +63,12 @@
 </head>
 <body>
     <div class="container">
-            <div class="header">
-    <a href="admin.html" class="admin-link">🔧 Админка</a>
-    <a href="public.html" class="admin-link" style="right: 150px;">👀 Смотреть галерею</a>
-    <h1>💐 Пространство для извинений</h1>
-    <p>Иногда самые важные слова бывает сложнее всего произнести</p>
-</div>
-    
-    
+        <div class="header">
+            <a href="public.html" class="gallery-link">👀 Галерея</a>
+            <a href="admin.html" class="admin-link">🔧 Админка</a>
+            <h1>💐 Пространство для извинений</h1>
+            <p>Иногда самые важные слова бывает сложнее всего произнести</p>
+        </div>
 
         <div class="content">
             <div class="loading" id="loading">⏳ Отправка извинения...</div>
@@ -129,15 +129,17 @@
                 apologyType: document.getElementById('apologyType').value,
                 message: document.getElementById('message').value,
                 timestamp: new Date().toISOString(),
-                status: 'new'
+                status: 'new',
+                
+                // НОВЫЕ ПОЛЯ ДЛЯ СИСТЕМЫ ПРОЩЕНИЙ
+                forgivenessRequests: [],
+                totalForgiveness: 0,
+                publiclyForgiven: false
             };
 
             try {
                 // Сохраняем в Firebase Firestore
                 await db.collection("apologies").add(apology);
-                
-                // Отслеживаем в Analytics
-                analytics.logEvent('apology_submitted');
                 
                 successMessage.style.display = 'block';
                 form.reset();

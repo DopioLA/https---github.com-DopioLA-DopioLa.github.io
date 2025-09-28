@@ -4,13 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель администратора - Izvini</title>
-
+    
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
-    
-    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
     
     <style>
@@ -45,16 +42,25 @@
         .status-approved { background: #27ae60; color: white; }
         .status-rejected { background: #e74c3c; color: white; }
         .loading { text-align: center; padding: 40px; color: #666; }
+        .forgiveness-requests { margin-top: 15px; padding: 15px; background: #fff3cd; border-radius: 5px; }
+        .forgiveness-request { background: white; padding: 10px; margin: 5px 0; border-radius: 5px; }
+        
+        @media (max-width: 768px) {
+            .filters { flex-direction: column; align-items: stretch; }
+            .stats { margin-left: 0; margin-top: 10px; }
+            .apology-header { flex-direction: column; align-items: flex-start; }
+            .apology-actions { justify-content: center; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-      <div class="header">
-    <a href="index.html" class="back-link">← На главную</a>
-    <a href="public.html" class="back-link" style="left: 150px;">👀 Публичная галерея</a>
-    <h1>🔧 Панель администратора</h1>
-    <p>Проект "Izvini" - Управление извинениями</p>
-</div>
+        <div class="header">
+            <a href="index.html" class="back-link">← На главную</a>
+            <a href="public.html" class="back-link" style="left: 150px;">👀 Публичная галерея</a>
+            <h1>🔧 Панель администратора</h1>
+            <p>Проект "Izvini" - Управление извинениями</p>
+        </div>
 
         <div class="filters">
             <select id="statusFilter">
@@ -64,6 +70,8 @@
                 <option value="rejected">Отклоненные</option>
             </select>
             <button onclick="loadApologies()">🔄 Обновить</button>
+            <button onclick="updateExistingApologies()" style="background: #9b59b6; color: white;">🔄 Обновить структуру</button>
+            <button onclick="exportData()">📥 Экспорт JSON</button>
             <div class="stats" id="stats">Загрузка...</div>
         </div>
 
@@ -104,13 +112,111 @@
             }
         }
 
+        // Отображение извинений
+        function displayApologies(apologies) {
+            const container = document.getElementById('apologiesList');
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            if (apologies.length === 0) {
+                container.innerHTML = '<div class="loading">📭 Нет извинений</div>';
+                return;
+            }
+
+            let filteredApologies = statusFilter === 'all' ? apologies : 
+                                  apologies.filter(a => a.status === statusFilter);
+
+            container.innerHTML = filteredApologies.map(apology => `
+                <div class="apology-card ${apology.status}">
+                    <div class="apology-header">
+                        <h3>👤 От: ${apology.name}</h3>
+                        <div>
+                            <span class="status-badge status-${apology.status}">
+                                ${apology.status === 'new' ? 'Новое' : 
+                                 apology.status === 'approved' ? 'Одобрено' : 'Отклонено'}
+                            </span>
+                            ${apology.publiclyForgiven ? '<span style="color: #27ae60; margin-left: 10px;">💚 Прощено</span>' : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="apology-meta">
+                        📝 ${getTypeText(apology.apologyType)} | 
+                        🕊️ Для: ${apology.toName} |
+                        📅 ${new Date(apology.timestamp).toLocaleDateString()} |
+                        💚 Прощений: ${apology.totalForgiveness || 0}
+                    </div>
+                    
+                    <p><strong>💬 Извинение:</strong> ${apology.message}</p>
+                    
+                    <!-- Запросы на прощение -->
+                    ${apology.forgivenessRequests && apology.forgivenessRequests.length > 0 ? `
+                        <div class="forgiveness-requests">
+                            <strong>⏳ Запросы на прощение:</strong>
+                            ${apology.forgivenessRequests.map(req => `
+                                <div class="forgiveness-request">
+                                    <strong>${req.forgivenBy}:</strong> ${req.forgivenessMessage || 'Без комментария'}
+                                    <br>
+                                    <small>📅 ${new Date(req.timestamp).toLocaleDateString()} | 
+                                    Статус: ${req.status === 'pending' ? '⏳ На модерации' : 
+                                            req.status === 'approved' ? '✅ Одобрено' : '❌ Отклонено'}</small>
+                                    
+                                    ${req.status === 'pending' ? `
+                                        <br>
+                                        <button class="btn-approve" onclick="approveForgiveness('${apology.id}', '${req.id}')" style="padding: 5px 10px; font-size: 12px;">
+                                            ✅ Одобрить
+                                        </button>
+                                        <button class="btn-reject" onclick="rejectForgiveness('${apology.id}', '${req.id}')" style="padding: 5px 10px; font-size: 12px;">
+                                            ❌ Отклонить
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    <div class="apology-actions">
+                        ${apology.status === 'new' ? `
+                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">
+                                ✅ Одобрить
+                            </button>
+                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">
+                                ❌ Отклонить
+                            </button>
+                        ` : ''}
+                        
+                        <button class="btn btn-delete" onclick="deleteApology('${apology.id}')">
+                            🗑️ Удалить
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
         // Обновление статуса
         async function updateStatus(apologyId, newStatus) {
             try {
-                await db.collection("apologies").doc(apologyId).update({
+                const updateData = {
                     status: newStatus,
                     moderatedAt: new Date().toISOString()
-                });
+                };
+                
+                // Если одобряем - проверяем и добавляем недостающие поля
+                if (newStatus === 'approved') {
+                    const apologyDoc = await db.collection("apologies").doc(apologyId).get();
+                    const apologyData = apologyDoc.data();
+                    
+                    // Добавляем поля если их нет
+                    if (!apologyData.forgivenessRequests) {
+                        updateData.forgivenessRequests = [];
+                    }
+                    if (typeof apologyData.totalForgiveness === 'undefined') {
+                        updateData.totalForgiveness = 0;
+                    }
+                    if (typeof apologyData.publiclyForgiven === 'undefined') {
+                        updateData.publiclyForgiven = false;
+                    }
+                }
+                
+                await db.collection("apologies").doc(apologyId).update(updateData);
                 loadApologies();
             } catch (error) {
                 console.error('Ошибка обновления:', error);
@@ -131,52 +237,125 @@
             }
         }
 
-        function displayApologies(apologies) {
-            const container = document.getElementById('apologiesList');
-            const statusFilter = document.getElementById('statusFilter').value;
-            
-            if (apologies.length === 0) {
-                container.innerHTML = '<div class="loading">📭 Нет извинений</div>';
-                return;
+        // Одобрить прощение
+        async function approveForgiveness(apologyId, requestId) {
+            try {
+                const apologyDoc = await db.collection("apologies").doc(apologyId).get();
+                const apologyData = apologyDoc.data();
+                
+                const updatedRequests = apologyData.forgivenessRequests.map(req => 
+                    req.id === requestId ? { ...req, status: 'approved' } : req
+                );
+                
+                const approvedCount = updatedRequests.filter(req => req.status === 'approved').length;
+                
+                await db.collection("apologies").doc(apologyId).update({
+                    forgivenessRequests: updatedRequests,
+                    totalForgiveness: approvedCount,
+                    publiclyForgiven: approvedCount > 0
+                });
+                
+                loadApologies();
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка при одобрении прощения');
             }
-
-            let filteredApologies = statusFilter === 'all' ? apologies : 
-                                  apologies.filter(a => a.status === statusFilter);
-
-            container.innerHTML = filteredApologies.map(apology => `
-                <div class="apology-card ${apology.status}">
-                    <div class="apology-header">
-                        <h3>👤 От: ${apology.name} → Для: ${apology.toName}</h3>
-                        <span class="status-badge status-${apology.status}">
-                            ${apology.status === 'new' ? 'Новое' : apology.status === 'approved' ? 'Одобрено' : 'Отклонено'}
-                        </span>
-                    </div>
-                    <div class="apology-meta">
-                        📝 ${apology.apologyType} | 📅 ${new Date(apology.timestamp).toLocaleString()}
-                    </div>
-                    <p><strong>💬 Извинение:</strong> ${apology.message}</p>
-                    
-                    <div class="apology-actions">
-                        ${apology.status === 'new' ? `
-                            <button class="btn btn-approve" onclick="updateStatus('${apology.id}', 'approved')">✅ Одобрить</button>
-                            <button class="btn btn-reject" onclick="updateStatus('${apology.id}', 'rejected')">❌ Отклонить</button>
-                        ` : ''}
-                        <button class="btn btn-delete" onclick="deleteApology('${apology.id}')">🗑️ Удалить</button>
-                    </div>
-                </div>
-            `).join('');
         }
 
+        // Отклонить прощение
+        async function rejectForgiveness(apologyId, requestId) {
+            if (confirm('Отклонить это прощение?')) {
+                try {
+                    const apologyDoc = await db.collection("apologies").doc(apologyId).get();
+                    const apologyData = apologyDoc.data();
+                    
+                    const updatedRequests = apologyData.forgivenessRequests.map(req => 
+                        req.id === requestId ? { ...req, status: 'rejected' } : req
+                    );
+                    
+                    await db.collection("apologies").doc(apologyId).update({
+                        forgivenessRequests: updatedRequests
+                    });
+                    
+                    loadApologies();
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    alert('Ошибка при отклонении прощения');
+                }
+            }
+        }
+
+        // Обновить существующие извинения
+        async function updateExistingApologies() {
+            if (confirm('Добавить поля прощений к существующим извинениям?')) {
+                try {
+                    const snapshot = await db.collection("apologies").get();
+                    const promises = [];
+                    
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const updateData = {};
+                        
+                        if (!data.forgivenessRequests) {
+                            updateData.forgivenessRequests = [];
+                        }
+                        if (typeof data.totalForgiveness === 'undefined') {
+                            updateData.totalForgiveness = 0;
+                        }
+                        if (typeof data.publiclyForgiven === 'undefined') {
+                            updateData.publiclyForgiven = false;
+                        }
+                        
+                        if (Object.keys(updateData).length > 0) {
+                            promises.push(db.collection("apologies").doc(doc.id).update(updateData));
+                        }
+                    });
+                    
+                    await Promise.all(promises);
+                    alert('✅ Извинения обновлены!');
+                    loadApologies();
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    alert('Ошибка при обновлении');
+                }
+            }
+        }
+
+        // Экспорт данных
+        function exportData() {
+            db.collection("apologies").get().then(snapshot => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const dataStr = JSON.stringify(data, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(dataBlob);
+                link.download = 'apologies_export.json';
+                link.click();
+            });
+        }
+
+        // Обновление статистики
         function updateStats(apologies) {
             const stats = {
                 total: apologies.length,
                 new: apologies.filter(a => a.status === 'new').length,
                 approved: apologies.filter(a => a.status === 'approved').length,
-                rejected: apologies.filter(a => a.status === 'rejected').length
+                rejected: apologies.filter(a => a.status === 'rejected').length,
+                forgivenessRequests: apologies.reduce((sum, a) => sum + (a.forgivenessRequests ? a.forgivenessRequests.length : 0), 0)
             };
             
             document.getElementById('stats').innerHTML = 
-                `📊 Всего: ${stats.total} | Новые: ${stats.new} | ✅: ${stats.approved} | ❌: ${stats.rejected}`;
+                `📊 Всего: ${stats.total} | Новые: ${stats.new} | ✅: ${stats.approved} | ❌: ${stats.rejected} | 💚 Запросов: ${stats.forgivenessRequests}`;
+        }
+
+        function getTypeText(type) {
+            const types = {
+                'personal': 'Личные отношения',
+                'friendship': 'Дружба',
+                'family': 'Семейные отношения',
+                'work': 'Рабочие отношения'
+            };
+            return types[type] || type;
         }
 
         // Загрузка при открытии

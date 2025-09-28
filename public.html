@@ -28,6 +28,7 @@
         }
         .nav-links {
             display: flex; gap: 15px; justify-content: center; margin-top: 15px;
+            flex-wrap: wrap;
         }
         .nav-links a {
             color: white; text-decoration: none; background: rgba(255,255,255,0.2);
@@ -42,7 +43,7 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         .apology-header {
-            display: flex; justify-content: between; align-items: center;
+            display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 15px; flex-wrap: wrap;
         }
         .apology-relationship {
@@ -61,11 +62,41 @@
         .empty-state {
             text-align: center; padding: 60px 20px; color: #666;
         }
-        .empty-state img { width: 100px; opacity: 0.5; margin-bottom: 20px; }
         .loading {
             text-align: center; padding: 40px; color: #666;
             font-size: 1.1em;
         }
+        
+        /* Стили для системы прощений */
+        .forgiveness-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white; border: none; padding: 10px 20px;
+            border-radius: 20px; cursor: pointer; margin: 10px 0;
+            font-size: 14px; transition: transform 0.2s;
+        }
+        .forgiveness-btn:hover { transform: translateY(-2px); }
+        
+        .forgiveness-modal {
+            display: none; position: fixed; top: 0; left: 0; 
+            width: 100%; height: 100%; background: rgba(0,0,0,0.5);
+            z-index: 1000; align-items: center; justify-content: center;
+        }
+        
+        .modal-content {
+            background: white; padding: 30px; border-radius: 15px;
+            max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
+        }
+        
+        .forgiveness-stats {
+            background: #e8f5e8; padding: 10px; border-radius: 5px;
+            margin: 10px 0; text-align: center; font-weight: bold;
+        }
+        
+        .forgiveness-item {
+            background: #f8f9fa; padding: 10px; margin: 5px 0;
+            border-radius: 5px; border-left: 3px solid #4CAF50;
+        }
+        
         .filters {
             background: #34495e; padding: 20px; text-align: center;
         }
@@ -75,9 +106,12 @@
             border-radius: 20px; cursor: pointer; transition: background 0.3s;
         }
         .filter-btn.active { background: #4CAF50; }
+        
         @media (max-width: 768px) {
             .apology-header { flex-direction: column; align-items: flex-start; }
             .nav-links { flex-direction: column; align-items: center; }
+            .filters { display: flex; flex-direction: column; gap: 10px; }
+            .filter-btn { margin: 5px 0; }
         }
     </style>
 </head>
@@ -85,7 +119,7 @@
     <div class="container">
         <div class="header">
             <h1>💐 Галерея искренних извинений</h1>
-            <p>Здесь собраны самые искренние слова примирения</p>
+            <p>Проявите милосердие - поддержите тех, кто ищет прощения</p>
             <div class="nav-links">
                 <a href="index.html">✍️ Написать извинение</a>
                 <a href="admin.html">🔧 Панель администратора</a>
@@ -109,185 +143,259 @@
         </div>
     </div>
 
-<script>
-let allApologies = [];
+    <!-- Модальное окно прощения -->
+    <div class="forgiveness-modal" id="forgivenessModal">
+        <div class="modal-content">
+            <h3>💚 Простить это извинение</h3>
+            
+            <div class="form-group">
+                <label>Ваше имя (как вас знать):</label>
+                <input type="text" id="forgiverName" placeholder="Как к вам обращаться?">
+            </div>
+            
+            <div class="form-group">
+                <label>Ваше сообщение (почему вы прощаете):</label>
+                <textarea id="forgiverMessage" placeholder="Я прощаю потому что... (опционально)"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="confirmForgiveness" required>
+                    Я хочу поддержать этого человека и простить его
+                </label>
+            </div>
+            
+            <button onclick="submitForgiveness()" class="forgiveness-btn">
+                💚 Отправить на модерацию
+            </button>
+            <button onclick="closeForgivenessModal()" style="background: #ccc; margin-left: 10px;">
+                Отмена
+            </button>
+        </div>
+    </div>
 
-// Умная загрузка с несколькими попытками
-async function loadPublicApologies() {
-    showLoading();
-    
-    try {
-        // Попытка 1: Оптимальный запрос с индексом
-        await loadWithIndex();
-    } catch (error) {
-        console.log('Попытка 1 не удалась:', error);
-        
-        try {
-            // Попытка 2: Альтернативный способ
-            await loadWithoutIndex();
-        } catch (error2) {
-            console.log('Попытка 2 не удалась:', error2);
-            showError('Не удалось загрузить извинения. Проверьте консоль для деталей.');
+    <script>
+        let allApologies = [];
+        let currentApologyId = null;
+
+        // Загрузка извинений
+        async function loadPublicApologies() {
+            try {
+                const snapshot = await db.collection("apologies")
+                    .where("status", "==", "approved")
+                    .get();
+                
+                allApologies = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                displayApologies(allApologies);
+                updateStats(allApologies);
+                
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                showError('Ошибка загрузки данных');
+            }
         }
-    }
-}
 
-// Способ 1: С индексом
-async function loadWithIndex() {
-    const snapshot = await db.collection("apologies")
-        .where("status", "==", "approved")
-        .orderBy("timestamp", "desc")
-        .get();
-    
-    allApologies = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    }));
-    
-    displayApologies(allApologies);
-    updateStats(allApologies);
-}
-
-// Способ 2: Без индекса (сортировка на клиенте)
-async function loadWithoutIndex() {
-    const snapshot = await db.collection("apologies")
-        .where("status", "==", "approved")
-        .get();
-    
-    allApologies = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    }));
-    
-    // Сортируем по дате (новые сначала)
-    allApologies.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    displayApologies(allApologies);
-    updateStats(allApologies);
-}
-
-// Способ 3: Максимально простой (все документы)
-async function loadAllDocuments() {
-    const snapshot = await db.collection("apologies").get();
-    
-    allApologies = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(apology => apology.status === "approved")
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    displayApologies(allApologies);
-    updateStats(allApologies);
-}
-
-// Вспомогательные функции
-function showLoading() {
-    document.getElementById('apologiesGallery').innerHTML = `
-        <div class="loading">
-            <div>⏳ Загрузка извинений...</div>
-            <small>Идёт соединение с базой данных</small>
-        </div>
-    `;
-}
-
-function showError(message) {
-    document.getElementById('apologiesGallery').innerHTML = `
-        <div class="empty-state">
-            <div>❌ ${message}</div>
-            <button onclick="loadPublicApologies()" style="
-                background: #4CAF50; color: white; border: none; 
-                padding: 10px 20px; border-radius: 5px; cursor: pointer;
-                margin-top: 10px;
-            ">Попробовать снова</button>
-        </div>
-    `;
-}
-
-function displayApologies(apologies) {
-    const container = document.getElementById('apologiesGallery');
-    
-    if (apologies.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div>📭 Пока нет одобренных извинений</div>
-                <small>Станьте первым, кто поделится искренними извинениями!</small>
-                <br><br>
-                <a href="index.html" style="
-                    background: #4CAF50; color: white; padding: 10px 20px;
-                    border-radius: 5px; text-decoration: none; display: inline-block;
-                ">✍️ Написать первое извинение</a>
-            </div>
-        `;
-        return;
-    }
-
-    container.innerHTML = apologies.map(apology => `
-        <div class="apology-card" data-type="${apology.apologyType}">
-            <div class="apology-header">
-                <h3>👤 ${apology.name}</h3>
-                <div>🕊️ Для: ${apology.toName}</div>
-            </div>
+        // Отображение извинений с кнопкой прощения
+        function displayApologies(apologies) {
+            const container = document.getElementById('apologiesGallery');
             
-            <div class="apology-relationship">
-                📝 ${getTypeText(apology.apologyType)}
-            </div>
+            if (apologies.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div>📭 Пока нет одобренных извинений</div>
+                        <small>Будьте первым, кто напишет искренние извинения!</small>
+                        <br><br>
+                        <a href="index.html" style="color: #4CAF50; text-decoration: none;">✍️ Написать первое извинение</a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = apologies.map(apology => `
+                <div class="apology-card" data-type="${apology.apologyType}">
+                    <div class="apology-header">
+                        <h3>👤 ${apology.name}</h3>
+                        <div>🕊️ Для: ${apology.toName}</div>
+                    </div>
+                    
+                    <div class="apology-relationship">
+                        📝 Тип отношений: ${getTypeText(apology.apologyType)}
+                    </div>
+                    
+                    <div class="apology-message">
+                        "${apology.message}"
+                    </div>
+                    
+                    <!-- Статистика прощений -->
+                    <div class="forgiveness-stats">
+                        💚 ${apology.totalForgiveness || 0} человек уже простили
+                        ${apology.forgivenessRequests ? 
+                            `| ⏳ ${apology.forgivenessRequests.filter(r => r.status === 'pending').length} на модерации` : 
+                            ''
+                        }
+                    </div>
+                    
+                    <!-- Одобренные прощения -->
+                    ${apology.forgivenessRequests && apology.forgivenessRequests.filter(r => r.status === 'approved').length > 0 ? `
+                        <div style="margin: 10px 0;">
+                            <strong>💚 Прощения:</strong>
+                            ${apology.forgivenessRequests.filter(r => r.status === 'approved').map(req => `
+                                <div class="forgiveness-item">
+                                    <strong>${req.forgivenBy}:</strong> ${req.forgivenessMessage || 'Прощено без комментариев'}
+                                    <small style="color: #666;">(${formatDate(req.timestamp)})</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    <!-- Кнопка прощения -->
+                    <div style="text-align: center; margin-top: 15px;">
+                        <button class="forgiveness-btn" onclick="openForgivenessModal('${apology.id}')">
+                            💚 Я тоже прощаю
+                        </button>
+                    </div>
+                    
+                    <div class="apology-date">
+                        📅 ${formatDate(apology.timestamp)}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Фильтрация по типам
+        function filterApologies(type) {
+            // Обновляем активную кнопку
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            const filtered = type === 'all' 
+                ? allApologies 
+                : allApologies.filter(a => a.apologyType === type);
             
-            <div class="apology-message">
-                "${apology.message}"
-            </div>
-            
-            <div class="apology-date">
-                📅 ${formatDate(apology.timestamp)}
-            </div>
-        </div>
-    `).join('');
-}
+            displayApologies(filtered);
+            updateStats(filtered);
+        }
 
-function updateStats(apologies) {
-    const statsText = apologies.length === 0 
-        ? '📊 Пока нет одобренных извинений'
-        : `📊 Показано: ${apologies.length} извинений`;
-    
-    document.getElementById('stats').innerHTML = statsText;
-}
+        // Обновление статистики
+        function updateStats(apologies) {
+            const totalApproved = allApologies.length;
+            const totalForgiveness = allApologies.reduce((sum, a) => sum + (a.totalForgiveness || 0), 0);
+            const pendingRequests = allApologies.reduce((sum, a) => sum + (a.forgivenessRequests ? a.forgivenessRequests.filter(r => r.status === 'pending').length : 0), 0);
 
-function getTypeText(type) {
-    const types = {
-        'personal': 'Личные отношения',
-        'friendship': 'Дружба',
-        'family': 'Семейные отношения', 
-        'work': 'Рабочие отношения'
-    };
-    return types[type] || type;
-}
+            document.getElementById('stats').innerHTML = `
+                📊 Извинений: ${totalApproved} | 💚 Прощений: ${totalForgiveness} | ⏳ На модерации: ${pendingRequests}
+            `;
+        }
 
-function formatDate(timestamp) {
-    try {
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diff = now - date;
-        
-        // Показываем относительное время
-        if (diff < 60000) return 'только что';
-        if (diff < 3600000) return `${Math.floor(diff / 60000)} мин назад`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)} ч назад`;
-        
-        return date.toLocaleDateString('ru-RU', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
+        // Открыть модальное окно прощения
+        function openForgivenessModal(apologyId) {
+            currentApologyId = apologyId;
+            document.getElementById('forgivenessModal').style.display = 'flex';
+        }
+
+        // Закрыть модальное окно
+        function closeForgivenessModal() {
+            document.getElementById('forgivenessModal').style.display = 'none';
+            document.getElementById('forgiverName').value = '';
+            document.getElementById('forgiverMessage').value = '';
+            document.getElementById('confirmForgiveness').checked = false;
+        }
+
+        // Отправить прощение на модерацию
+        async function submitForgiveness() {
+            const forgiverName = document.getElementById('forgiverName').value.trim();
+            const forgiverMessage = document.getElementById('forgiverMessage').value.trim();
+            const confirmed = document.getElementById('confirmForgiveness').checked;
+
+            if (!forgiverName) {
+                alert('Пожалуйста, введите ваше имя');
+                return;
+            }
+
+            if (!confirmed) {
+                alert('Пожалуйста, подтвердите ваше решение');
+                return;
+            }
+
+            try {
+                const forgivenessRequest = {
+                    id: 'req_' + Date.now(),
+                    forgivenBy: forgiverName,
+                    forgivenessMessage: forgiverMessage,
+                    timestamp: new Date().toISOString(),
+                    status: 'pending' // на модерации
+                };
+
+                // Добавляем запрос в массив прощений
+                await db.collection("apologies").doc(currentApologyId).update({
+                    forgivenessRequests: firebase.firestore.FieldValue.arrayUnion(forgivenessRequest)
+                });
+
+                alert('✅ Ваше прощение отправлено на модерацию! Админ проверит его и опубликует.');
+                closeForgivenessModal();
+                loadPublicApologies(); // Обновляем галерею
+                
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('❌ Ошибка при отправке прощения');
+            }
+        }
+
+        // Вспомогательные функции
+        function getTypeText(type) {
+            const types = {
+                'personal': 'Личные отношения',
+                'friendship': 'Дружба',
+                'family': 'Семейные отношения', 
+                'work': 'Рабочие отношения'
+            };
+            return types[type] || type;
+        }
+
+        function formatDate(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleDateString('ru-RU', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch {
+                return 'дата неизвестна';
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('apologiesGallery').innerHTML = `
+                <div class="empty-state">
+                    <div>❌ ${message}</div>
+                    <button onclick="loadPublicApologies()" style="
+                        background: #4CAF50; color: white; border: none; 
+                        padding: 10px 20px; border-radius: 5px; cursor: pointer;
+                        margin-top: 10px;
+                    ">Попробовать снова</button>
+                </div>
+            `;
+        }
+
+        // Загрузка при открытии
+        window.onload = loadPublicApologies;
+
+        // Закрытие модального окна по клику вне его
+        document.getElementById('forgivenessModal').addEventListener('click', function(e) {
+            if (e.target === this) closeForgivenessModal();
         });
-    } catch {
-        return 'дата неизвестна';
-    }
-}
 
-// Загрузка при открытии
-document.addEventListener('DOMContentLoaded', function() {
-    loadPublicApologies();
-});
-
-// Авто-обновление каждую минуту
-setInterval(loadPublicApologies, 60000);
-</script>
+        // Авто-обновление каждые 30 секунд
+        setInterval(loadPublicApologies, 30000);
+    </script>
 </body>
 </html>
